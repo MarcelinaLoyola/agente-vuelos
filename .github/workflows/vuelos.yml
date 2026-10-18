@@ -2,13 +2,18 @@ name: Agente de vuelos
 on:
   schedule:
     - cron: "0 */6 * * *"    # cada 6 horas
+  push:
+    paths: ["viajes.json"]   # al crear o borrar un viaje desde Telegram, busca enseguida
   workflow_dispatch: {}      # boton para ejecutarlo a mano
 permissions:
   contents: write
+concurrency:
+  group: agente-vuelos       # nunca dos busquedas a la vez: se pisarian el estado
+  cancel-in-progress: false
 jobs:
   buscar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60      # unos 4 minutos por viaje
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,5 +32,10 @@ jobs:
         run: |
           git config user.name "agente-vuelos"
           git config user.email "agente@users.noreply.github.com"
-          git add estado.json || true
-          git diff --cached --quiet || (git commit -m "Actualiza mejor precio" && git push)
+          git add estado_viajes.json || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Actualiza mejor precio"
+            # El bot de Telegram tambien escribe en el repositorio (viajes.json)
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push
+          fi

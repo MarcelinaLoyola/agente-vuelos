@@ -1,0 +1,17 @@
+{
+ "viajes": [
+  {
+   "id": "madrid-feb-2027",
+   "nombre": "Madrid",
+   "origen": "AQP",
+   "destino": "MAD",
+   "hub": "LIM",
+   "salida_desde": "2027-02-12",
+   "flex_dias": 3,
+   "dur_min": 21,
+   "dur_max": 28,
+   "adultos": 3,
+   "umbral_por_persona_eur": 980
+  }
+ ]
+}
