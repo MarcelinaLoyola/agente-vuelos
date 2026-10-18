@@ -298,7 +298,10 @@ async function avanzar(env, s, texto) {
       if (!/^(si|sí|s|ok|dale)$/i.test(texto)) return 'Responde "si" para guardarlo o "no" para cancelar.';
       const id = await guardarViaje(env, s);
       s.cancelado = true; // fin de la conversacion
-      return `Guardado (${id}). Empiezo a buscar ahora: en unos 5 a 10 minutos te llega el primer resultado, y despues reviso cada 6 horas. Te aviso cuando haya una oferta.`;
+      // Con presupuesto solo se avisa cuando el precio baja de el; sin presupuesto, llega el primer precio.
+      return d.presupuesto
+        ? `Guardado (${id}). Empiezo a buscar ahora y reviso cada 6 horas. Te aviso solo cuando el precio baje de ${d.presupuesto} EUR por persona; si no hay aviso, es que aun no llega a tu presupuesto.`
+        : `Guardado (${id}). Empiezo a buscar ahora: en unos 5 a 10 minutos te llega el primer resultado, y despues reviso cada 6 horas. Te aviso cuando haya una oferta.`;
     }
   }
 }

@@ -130,6 +130,7 @@ check("confirmacion ambigua", r.includes('"si"'));
 forzarConflicto = 1;
 r = await di("si");
 check("guarda y sobrevive a un conflicto 409 de GitHub", r.includes("Guardado") && puts === 1);
+check("con presupuesto: avisa que solo escribe si baja de el (no promete resultado)", r.includes("980 EUR por persona") && !r.includes("primer resultado"));
 const v = archivo.viajes[0];
 check("viajes.json: campos correctos", v && v.destino === "MAD" && v.origen === "AQP" && v.hub === "LIM" && v.adultos === 3 &&
   v.umbral_por_persona_eur === 980 && v.flex_dias === 3 && v.dur_min === 21 && v.dur_max === 28 &&
@@ -140,7 +141,8 @@ check("la conversacion termino", !kvDatos.has("chat:42"));
 await di("/viaje"); await di("madrid"); await di("1"); await di("ok");
 await di(ddmmyyyy(salida)); await di("0"); await di("7"); await di("1"); await di("no"); r = await di("no");
 check("sin escala ni presupuesto: resumen", r.includes("sin limite") && r.includes("ninguna") && r.includes("Duracion: 7 dias") && r.includes("1 adulto\n"));
-await di("si");
+r = await di("si");
+check("sin presupuesto: promete el primer resultado", r.includes("primer resultado"));
 const v2 = archivo.viajes[1];
 check("id repetido recibe sufijo y omite hub/umbral", v2.id === v.id + "-2" && !("hub" in v2) && !("umbral_por_persona_eur" in v2));
 

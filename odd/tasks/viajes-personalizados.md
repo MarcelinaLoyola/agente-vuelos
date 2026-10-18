@@ -42,10 +42,12 @@ chat front-end is a Cloudflare Worker (free plan) and the search stays on GitHub
   Telegram `setWebhook` ok with secret_token and allowed_updates=["message"]; live Worker
   answers 200 to GET and 403 to POST without/with a wrong webhook secret. wrangler OAuth
   login failed ("Unauthorized"), so a Cloudflare API token from `.env` was used instead.
-- [ ] T5 End-to-end test: create a trip from Telegram, see it searched and alerted
-  Status (2026-10-18): `/viajes` verified live from Telegram. `/viaje` creation failed once because the
-  GitHub token was read-only; permission fixed (write test: PUT with a wrong sha now returns 409, not 403).
-  Still to do by the user: run `/viaje` with a cheap test trip, confirm "Guardado", then `/borrar 2`.
+- [x] T5 End-to-end test: create a trip from Telegram, see it searched and alerted
+  Evidence (2026-10-18): the owner ran `/viaje`; GitHub commit d1dd1d5 "feat: add trip cusco-2027-02 from
+  Telegram" (author uses the noreply email); the push-triggered workflow run succeeded, searched the new trip
+  (4 queries, 0 failed) and wrote estado_viajes.json (best 230 EUR for 2 adults, not alerted because the budget
+  is 50 EUR/person). The earlier failure was a read-only GitHub token; fixed. Confirmation message corrected
+  so it no longer promises a first result when a budget is set (45/45 worker checks), deployed to Cloudflare.
 - [x] T6 Docs (LEEME) and cleanup
   Evidence: LEEME describes viajes.json, the bot and its commands; Python tests moved into
   `tests/test_viajes.py` (21 checks pass).
@@ -62,5 +64,6 @@ already created in the user's account (`agente-vuelos-bot.marcelinaloyola0.worke
 GitHub fine-grained token pending to be saved in `.env` as GITHUB_TOKEN.
 
 ## Next step
-T5: the owner runs `/viaje` once from Telegram. Everything else in this feature is done. The follow-up product
-work (Kuntur) is tracked separately as the SDD change `kuntur-platform`; see HANDOFF.md.
+None: this feature is complete (T1-T6 done). The owner decides whether to keep the test trip `cusco-2027-02`
+(`/borrar 2` removes it). The follow-up product work (Kuntur) is tracked separately as the SDD change
+`kuntur-platform`; see HANDOFF.md.
