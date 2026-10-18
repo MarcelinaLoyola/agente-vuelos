@@ -15,11 +15,17 @@ import itertools
 import json
 import os
 import statistics
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 from pathlib import Path
+
+try:
+    import google_flights as gf
+except ImportError:  # faltan dependencias: se usa solo el cache de Travelpayouts
+    gf = None
 
 CONFIG = {
     "origen": "AQP",
@@ -31,7 +37,7 @@ CONFIG = {
     "dur_max": 28,                  # 28 dias = 4 semanas (duracion maxima del viaje)
     "noches_lima_opciones": [0, 1], # noches en Lima a probar en cada sentido (0 = mismo dia)
     "hotel_noche_eur": 40,
-    "umbral_total_eur": 1100,       # avisa la primera vez que el total baja de esto
+    "umbral_total_eur": 980,        # avisa la primera vez que el total baja de esto
     "mejora_minima_pct": 5,         # y despues, solo si mejora el mejor precio anterior en este %
     "moneda": "eur",
     "top": 3,                       # con mas, el aviso supera los 4000 caracteres de Telegram
@@ -99,7 +105,89 @@ def gflights(o, dest, ida, vuelta):
         params, quote_via=urllib.parse.quote)
 
 
-def buscar():
+def conecta_ida(aqp_lim, lim_mad, margen_min=180):
+    """Con billetes separados y 0 noches en Lima, el LIM-MAD debe salir mucho despues de que
+    aterrice el AQP-LIM. Solo se puede comprobar la ida: Google no da el horario de la vuelta."""
+    llegada = gf.minutos_dia(aqp_lim["hora_salida"]) + (aqp_lim["duracion_min"] or 0)
+    return gf.minutos_dia(lim_mad["hora_salida"]) - llegada >= margen_min
+
+
+def buscar_vivo():
+    """Precios en vivo de Google Flights. Devuelve None si Google no responde."""
+    c = CONFIG
+    d0 = d(c["salida_desde"])
+    opciones = c["noches_lima_opciones"]
+    tramos, unico = [], []
+    fallos_seguidos = 0
+
+    def consulta(origen, destino, ida, vuelta):
+        nonlocal fallos_seguidos
+        try:
+            r = gf.mas_barato(origen, destino, ida, vuelta, c["moneda"].upper())
+            fallos_seguidos = 0
+            return r
+        except gf.GoogleError as e:
+            fallos_seguidos += 1
+            print(f"[aviso] Google Flights: {e}", file=sys.stderr)
+            if fallos_seguidos >= 3:
+                raise
+            return None
+
+    try:
+        for i in range(c["flex_dias"] + 1):
+            dep = d0 + timedelta(i)
+            for dur in range(c["dur_min"], c["dur_max"] + 1):
+                ret = dep + timedelta(dur)
+                b = consulta(c["origen"], c["hub"], dep, ret)
+                if b:
+                    for no, nb in itertools.product(opciones, opciones):
+                        dep_lim, ret_mad = dep + timedelta(no), ret - timedelta(nb)
+                        a = consulta(c["hub"], c["destino"], dep_lim, ret_mad)
+                        if not a:
+                            continue
+                        if no == 0 and not conecta_ida(b, a):
+                            continue
+                        hotel = c["hotel_noche_eur"] * (no + nb)
+                        tramos.append({
+                            "total": a["precio"] + b["precio"] + hotel,
+                            "lim_mad": a["precio"], "aqp_lim": b["precio"], "hotel": hotel,
+                            "aqp_lim_estimado": False, "noches": (no, nb),
+                            "salida": dep, "regreso": ret, "dias": dur,
+                            "lim_mad_salida": dep_lim, "mad_lim_salida": ret_mad,
+                            "link": "",
+                            "detalle": (f"LIM-MAD: {', '.join(a['aerolineas'])}, "
+                                        f"escalas {a['escalas']} | AQP-LIM: "
+                                        f"{', '.join(b['aerolineas'])}")})
+                m = consulta(c["origen"], c["destino"], dep, ret)
+                if m:
+                    unico.append({"total": m["precio"], "salida": dep, "regreso": ret,
+                                  "dias": dur, "escalas": m["escalas"], "link": ""})
+    except gf.GoogleError:
+        return None
+    print(f"[info] Google Flights: {gf.stats['consultas']} consultas, "
+          f"{gf.stats['fallos']} fallidas.", file=sys.stderr)
+    tramos.sort(key=lambda x: x["total"])
+    unico.sort(key=lambda x: x["total"])
+    return tramos[: c["top"]], unico[: c["top"]]
+
+
+def buscar_vivo_robusto(max_procesos=40):
+    """Hace la busqueda en vivo en procesos hijos, que se relanzan si el cliente HTTP los mata.
+
+    Cada hijo guarda sus resultados en el cache en disco de google_flights; al terminar uno
+    sin caidas, el proceso principal arma el resultado leyendo solo de ese cache.
+    """
+    if gf is None:
+        return None
+    for _ in range(max_procesos):
+        hijo = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--precalentar"])
+        if hijo.returncode == 0:
+            return buscar_vivo()
+    print("[aviso] La busqueda en vivo se interrumpio demasiadas veces.", file=sys.stderr)
+    return None
+
+
+def buscar_cache():
     c = CONFIG
     d0 = d(c["salida_desde"])
     d1 = d0 + timedelta(c["flex_dias"])
@@ -151,9 +239,11 @@ def f(x):
     return f"{x:,.0f}".replace(",", ".")
 
 
-def mensaje(tramos, unico):
+def mensaje(tramos, unico, fuente="cache"):
     c = CONFIG
-    m ="Vuelos Arequipa - Lima - Madrid\n"
+    en_vivo = fuente == "vivo"
+    m = "Vuelos Arequipa - Lima - Madrid " + (
+        "(precios en vivo de Google Flights)\n" if en_vivo else "(precios en cache)\n")
     if tramos:
         m += "\nMejores combinaciones por tramos (total con hotel):\n"
         for t in tramos:
@@ -162,8 +252,10 @@ def mensaje(tramos, unico):
                   f"({t['dias']} dias){est}\n"
                   f"  Noches en Lima ida/vuelta: {t['noches'][0]}/{t['noches'][1]}\n"
                   f"  LIM-MAD ida/vuelta {f(t['lim_mad'])} + AQP-LIM {f(t['aqp_lim'])} "
-                  f"+ hotel {f(t['hotel'])}\n  {t['link']}\n"
-                  f"  Confirmar en vivo (Google Flights):\n"
+                  f"+ hotel {f(t['hotel'])}\n"
+                  + (f"  {t['detalle']}\n" if t.get("detalle") else "")
+                  + (f"  {t['link']}\n" if t["link"] else "")
+                  + f"  Confirmar en vivo (Google Flights):\n"
                   f"  AQP-LIM: {gflights(c['origen'], c['hub'], t['salida'], t['regreso'])}\n"
                   f"  LIM-MAD: {gflights(c['hub'], c['destino'], t['lim_mad_salida'], t['mad_lim_salida'])}\n")
     else:
@@ -172,10 +264,13 @@ def mensaje(tramos, unico):
         m += "\nBillete unico AQP-MAD:\n"
         for u in unico[:3]:
             m += (f"- {f(u['total'])} EUR | sale {u['salida']} vuelve {u['regreso']} "
-                  f"({u['dias']} dias, escalas: {u['escalas']})\n  {u['link']}\n"
-                  f"  Google Flights: {gflights(c['origen'], c['destino'], u['salida'], u['regreso'])}\n")
-    m += ("\nPrecios en cache de buscadores: confirma al abrir el enlace. "
-          "Con 0 noches en Lima no hay proteccion de conexion entre billetes separados.")
+                  f"({u['dias']} dias, escalas: {u['escalas']})\n"
+                  + (f"  {u['link']}\n" if u["link"] else "")
+                  + f"  Google Flights:{gflights(c['origen'], c['destino'], u['salida'], u['regreso'])}\n")
+    m += ("\nPrecios en vivo, pero pueden cambiar: confirma al abrir el enlace. " if en_vivo
+          else "\nPrecios en cache de buscadores: confirma al abrir el enlace. ")
+    m += ("Con 0 noches en Lima, la conexion de ida se verifica (3 h minimo) pero la de vuelta "
+          "no, y no hay proteccion entre billetes separados.")
     return m
 
 
@@ -196,9 +291,18 @@ def main():
     if "--test-telegram" in sys.argv:
         telegram("Prueba: el agente de vuelos AQP-LIM-MAD esta conectado.")
         return
-    tramos, unico = buscar()
-    txt = mensaje(tramos, unico)
-    print(txt)
+    if "--precalentar" in sys.argv:  # modo hijo: solo llena el cache en disco
+        buscar_vivo()
+        return
+    resultado = buscar_vivo_robusto()
+    fuente = "vivo"
+    if resultado is None or not (resultado[0] or resultado[1]):
+        print("[aviso] Sin datos en vivo de Google Flights: uso el cache de Travelpayouts.",
+              file=sys.stderr)
+        resultado, fuente = buscar_cache(), "cache"
+    tramos, unico = resultado
+    txt = mensaje(tramos, unico, fuente)
+    print(txt, flush=True)
 
     # Solo precios confiables deciden el aviso: las combinaciones con AQP-LIM estimado
     # (mediana) se muestran, pero no disparan alertas.
