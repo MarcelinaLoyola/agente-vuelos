@@ -308,7 +308,9 @@ def guia_compra(tramos, unico):
 
 def telegram(texto):
     """Envia el mensaje. Devuelve True solo si Telegram lo acepto."""
-    tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    # strip: un secret pegado con espacios, salto de linea o BOM (﻿) rompe la peticion
+    tok, chat = (os.environ.get(v, "").strip("﻿ \t\r\n")
+                 for v in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"))
     if not tok or not chat:
         print("[aviso] Falta TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID: no se envio aviso.")
         return False
