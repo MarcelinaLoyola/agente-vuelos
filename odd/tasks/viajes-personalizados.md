@@ -28,10 +28,20 @@ chat front-end is a Cloudflare Worker (free plan) and the search stays on GitHub
   ad-hoc Python scripts run with the scratch venv. Mode: off. Source: project state.
 
 ## Tasks
-- [ ] T1 Generalise Python to run N trips from `viajes.json` (route: inline, 1 file + data)
-- [ ] T2 Initial `viajes.json` migrated from the current CONFIG; per-trip state; workflow update
-- [ ] T3 Cloudflare Worker: conversation, validation, IATA lookup, GitHub write (route: inline)
-- [ ] T4 Deploy Worker with wrangler, set secrets, register Telegram webhook
+- [x] T1 Generalise Python to run N trips from `viajes.json` (route: inline, 1 file + data)
+  Evidence: 21 ad-hoc checks pass (multi-trip, per-trip state, BOM, no-hub trips, failure
+  isolation); real Actions run reproduced 2.715 EUR / 3 adults. Commit c7a703c.
+- [x] T2 Initial `viajes.json` migrated from the current CONFIG; per-trip state; workflow update
+  Evidence: push to `viajes.json` triggered the workflow by itself (event=push), seeded state
+  prevented a duplicate alert. Commit c7a703c.
+- [x] T3 Cloudflare Worker: conversation, validation, IATA lookup, GitHub write (route: inline)
+  Evidence: `node worker/test.mjs` 43/43 (full conversation, 409 retry, webhook secret, foreign
+  chat ignored, delete). Commit 5b1286c.
+- [x] T4 Deploy Worker with wrangler, set secrets, register Telegram webhook
+  Evidence: deployed `agente-vuelos-bot` (4 secrets uploaded, KV bound, preview URLs off);
+  Telegram `setWebhook` ok with secret_token and allowed_updates=["message"]; live Worker
+  answers 200 to GET and 403 to POST without/with a wrong webhook secret. wrangler OAuth
+  login failed ("Unauthorized"), so a Cloudflare API token from `.env` was used instead.
 - [ ] T5 End-to-end test: create a trip from Telegram, see it searched and alerted
 - [ ] T6 Docs (LEEME) and cleanup
 
