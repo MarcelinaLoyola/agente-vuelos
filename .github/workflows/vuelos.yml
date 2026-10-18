@@ -1,0 +1,27 @@
+name: Agente de vuelos
+on:
+  schedule:
+    - cron: "0 */6 * * *"    # cada 6 horas
+  workflow_dispatch: {}      # boton para ejecutarlo a mano
+permissions:
+  contents: write
+jobs:
+  buscar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Buscar vuelos y avisar
+        env:
+          TRAVELPAYOUTS_TOKEN: ${{ secrets.TRAVELPAYOUTS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python buscador_vuelos.py
+      - name: Guardar mejor precio
+        run: |
+          git config user.name "agente-vuelos"
+          git config user.email "agente@users.noreply.github.com"
+          git add estado.json || true
+          git diff --cached --quiet || (git commit -m "Actualiza mejor precio" && git push)
