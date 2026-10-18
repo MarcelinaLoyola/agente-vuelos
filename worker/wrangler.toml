@@ -1,0 +1,12 @@
+name = "agente-vuelos-bot"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+GITHUB_REPO = "MarcelinaLoyola/agente-vuelos"
+DEFAULT_ORIGIN = "AQP"
+
+# La conversacion en curso de cada chat. El id lo escribe `wrangler kv namespace create`.
+[[kv_namespaces]]
+binding = "ESTADO"
+id = "PENDIENTE"
