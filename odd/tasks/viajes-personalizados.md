@@ -43,7 +43,12 @@ chat front-end is a Cloudflare Worker (free plan) and the search stays on GitHub
   answers 200 to GET and 403 to POST without/with a wrong webhook secret. wrangler OAuth
   login failed ("Unauthorized"), so a Cloudflare API token from `.env` was used instead.
 - [ ] T5 End-to-end test: create a trip from Telegram, see it searched and alerted
-- [ ] T6 Docs (LEEME) and cleanup
+  Status (2026-10-18): `/viajes` verified live from Telegram. `/viaje` creation failed once because the
+  GitHub token was read-only; permission fixed (write test: PUT with a wrong sha now returns 409, not 403).
+  Still to do by the user: run `/viaje` with a cheap test trip, confirm "Guardado", then `/borrar 2`.
+- [x] T6 Docs (LEEME) and cleanup
+  Evidence: LEEME describes viajes.json, the bot and its commands; Python tests moved into
+  `tests/test_viajes.py` (21 checks pass).
 
 ## Acceptance criteria
 - `/viaje` in Telegram walks through the questions and stores a valid trip in `viajes.json`.
@@ -57,4 +62,5 @@ already created in the user's account (`agente-vuelos-bot.marcelinaloyola0.worke
 GitHub fine-grained token pending to be saved in `.env` as GITHUB_TOKEN.
 
 ## Next step
-T1.
+T5: the owner runs `/viaje` once from Telegram. Everything else in this feature is done. The follow-up product
+work (Kuntur) is tracked separately as the SDD change `kuntur-platform`; see HANDOFF.md.

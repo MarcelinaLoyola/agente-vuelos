@@ -4,3 +4,8 @@ __pycache__/
 worker/node_modules/
 worker/.wrangler/
 worker/.dev.vars
+
+# Planificacion y notas privadas del producto (el repo es publico)
+openspec/
+.atl/
+HANDOFF.md

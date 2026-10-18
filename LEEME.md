@@ -21,10 +21,22 @@ Si Google no responde, usa como respaldo el cache de Travelpayouts (requiere tok
 Edita el bloque CONFIG al inicio de `buscador_vuelos.py`: fechas, `flex_dias`, duracion,
 noches en Lima (`noches_lima_opciones`, 0 = mismo dia), costo del hotel, `umbral_total_eur`.
 
+## Viajes y bot de Telegram
+Los viajes viven en `viajes.json` (varios a la vez; el estado de cada uno en `estado_viajes.json`).
+Puedes editarlo a mano o crear viajes chateando con el bot, desplegado como Cloudflare Worker (`worker/`):
+
+- `/viaje` te pregunta destino, origen, fecha, flexibilidad, duracion, personas, presupuesto por persona y escala.
+- `/viajes` lista los viajes, `/borrar <numero>` borra uno, `/cancelar` cancela la conversacion.
+- Al guardar un viaje, el workflow se ejecuta solo y busca enseguida.
+- Solo obedece a tu chat (`ALLOWED_CHAT_ID`) y exige el secreto del webhook.
+- El bot escribe en `viajes.json` por la API de GitHub: su token necesita el permiso **Contents: Read and write**.
+
 ## Probar en tu computadora
     pip install -r requirements.txt
     python buscador_vuelos.py
     python buscador_vuelos.py --test-telegram
+    python tests/test_viajes.py        # pruebas del buscador (sin red)
+    node worker/test.mjs               # pruebas del bot (sin red)
 
 Una busqueda completa hace unas 110 consultas y tarda 2 a 4 minutos.
 
