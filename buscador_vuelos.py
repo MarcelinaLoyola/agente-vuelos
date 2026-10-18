@@ -36,8 +36,9 @@ CONFIG = {
     "dur_min": 21,                  # 21 dias = 3 semanas (duracion minima del viaje)
     "dur_max": 28,                  # 28 dias = 4 semanas (duracion maxima del viaje)
     "noches_lima_opciones": [0, 1], # noches en Lima a probar en cada sentido (0 = mismo dia)
-    "hotel_noche_eur": 40,
-    "umbral_total_eur": 980,        # avisa la primera vez que el total baja de esto
+    "adultos": 3,                   # los precios y totales son los de TODO el grupo
+    "hotel_noche_eur": 60,          # por noche para todo el grupo (p. ej. una triple); ajustalo
+    "umbral_por_persona_eur": 980,  # avisa la primera vez que el precio por persona baja de esto
     "mejora_minima_pct": 5,         # y despues, solo si mejora el mejor precio anterior en este %
     "moneda": "eur",
     "top": 3,                       # con mas, el aviso supera los 4000 caracteres de Telegram
@@ -98,8 +99,8 @@ def link(it):
 
 
 def gflights(o, dest, ida, vuelta):
-    """Enlace a Google Flights con ruta y fechas ya cargadas, para confirmar el precio en vivo."""
-    q = f"Flights from {o} to {dest} on {ida} through {vuelta}"
+    """Enlace a Google Flights con ruta, fechas y pasajeros ya cargados, para confirmar el precio."""
+    q = f"Flights from {o} to {dest} on {ida} through {vuelta} for {CONFIG['adultos']} adults"
     params = {"q": q, "curr": CONFIG["moneda"].upper()}
     return "https://www.google.com/travel/flights?" + urllib.parse.urlencode(
         params, quote_via=urllib.parse.quote)
@@ -123,7 +124,7 @@ def buscar_vivo():
     def consulta(origen, destino, ida, vuelta):
         nonlocal fallos_seguidos
         try:
-            r = gf.mas_barato(origen, destino, ida, vuelta, c["moneda"].upper())
+            r = gf.mas_barato(origen, destino, ida, vuelta, c["moneda"].upper(), c["adultos"])
             fallos_seguidos = 0
             return r
         except gf.GoogleError as e:
@@ -217,9 +218,10 @@ def buscar_cache():
             precio_b = b["price"] if b else ref_lim
             if precio_b is None:
                 continue
+            n = c["adultos"]  # el cache da el precio por persona; aqui se escala al grupo
             tramos.append({
-                "total": a["price"] + precio_b + hotel,
-                "lim_mad": a["price"], "aqp_lim": precio_b, "hotel": hotel,
+                "total": (a["price"] + precio_b) * n + hotel,
+                "lim_mad": a["price"] * n, "aqp_lim": precio_b * n, "hotel": hotel,
                 "aqp_lim_estimado": estimado, "noches": (no, nb),
                 "salida": aqp_dep, "regreso": aqp_ret, "dias": dur,
                 "lim_mad_salida": dep_lim, "mad_lim_salida": ret_mad,
@@ -228,7 +230,7 @@ def buscar_cache():
     for (dep, ret), a in aqp_mad.items():
         dur = (ret - dep).days
         if d0 <= dep <= d1 and c["dur_min"] <= dur <= c["dur_max"]:
-            unico.append({"total": a["price"], "salida": dep, "regreso": ret,
+            unico.append({"total": a["price"] * c["adultos"], "salida": dep, "regreso": ret,
                           "dias": dur, "escalas": a.get("transfers"), "link": link(a)})
     tramos.sort(key=lambda x: x["total"])
     unico.sort(key=lambda x: x["total"])
@@ -242,13 +244,15 @@ def f(x):
 def mensaje(tramos, unico, fuente="cache"):
     c = CONFIG
     en_vivo = fuente == "vivo"
-    m = "Vuelos Arequipa - Lima - Madrid " + (
+    n = c["adultos"]
+    m = f"Vuelos Arequipa - Lima - Madrid, {n} adultos " + (
         "(precios en vivo de Google Flights)\n" if en_vivo else "(precios en cache)\n")
     if tramos:
-        m += "\nMejores combinaciones por tramos (total con hotel):\n"
+        m += f"\nMejores combinaciones por tramos (total de los {n} con hotel):\n"
         for t in tramos:
             est = " (AQP-LIM estimado)" if t["aqp_lim_estimado"] else ""
-            m += (f"- {f(t['total'])} EUR | sale {t['salida']} vuelve {t['regreso']} "
+            m += (f"- {f(t['total'])} EUR ({f(t['total'] / n)} por persona) | "
+                  f"sale {t['salida']} vuelve {t['regreso']} "
                   f"({t['dias']} dias){est}\n"
                   f"  Noches en Lima ida/vuelta: {t['noches'][0]}/{t['noches'][1]}\n"
                   f"  LIM-MAD ida/vuelta {f(t['lim_mad'])} + AQP-LIM {f(t['aqp_lim'])} "
@@ -263,7 +267,8 @@ def mensaje(tramos, unico, fuente="cache"):
     if unico:
         m += "\nBillete unico AQP-MAD:\n"
         for u in unico[:3]:
-            m += (f"- {f(u['total'])} EUR | sale {u['salida']} vuelve {u['regreso']} "
+            m += (f"- {f(u['total'])} EUR ({f(u['total'] / n)} por persona) | "
+                  f"sale {u['salida']} vuelve {u['regreso']} "
                   f"({u['dias']} dias, escalas: {u['escalas']})\n"
                   + (f"  {u['link']}\n" if u["link"] else "")
                   + f"  Google Flights: {gflights(c['origen'], c['destino'], u['salida'], u['regreso'])}\n")
@@ -276,14 +281,16 @@ def mensaje(tramos, unico, fuente="cache"):
 
 def guia_compra(tramos, unico):
     """Segundo mensaje del aviso: como comprar la opcion mas barata sin llevarse sorpresas."""
+    n = CONFIG["adultos"]
     mejor_t = tramos[0] if tramos else None
     mejor_u = unico[0] if unico else None
-    g = "Como comprarlo (lo haces tu, desde tu navegador: el agente nunca compra)\n\n"
+    g ="Como comprarlo (lo haces tu, desde tu navegador: el agente nunca compra)\n\n"
     if mejor_t and (not mejor_u or mejor_t["total"] <= mejor_u["total"]):
-        g += (f"Opcion elegida: {f(mejor_t['total'])} EUR en dos billetes separados.\n"
+        g += (f"Opcion elegida: {f(mejor_t['total'])} EUR para {n} adultos "
+              f"({f(mejor_t['total'] / n)} por persona), en dos billetes separados.\n"
               + (f"{mejor_t['detalle']}\n" if mejor_t.get("detalle") else "") + "\n"
-              "1. Abre cada enlace de Google Flights y confirma que el precio sigue igual. "
-              "Los precios cambian en horas.\n"
+              "1. Abre cada enlace de Google Flights y confirma que el precio sigue igual "
+              f"y que figuran {n} pasajeros. Los precios cambian en horas.\n"
               "2. Elige 'Reservar' en la web de la aerolinea si cuesta lo mismo que en una agencia: "
               "los cambios y reclamos son mas faciles.\n"
               "3. Compra primero el LIM-MAD, que es el caro y el que manda en las fechas; "
@@ -293,10 +300,13 @@ def guia_compra(tramos, unico):
               "5. Con billetes separados debes recoger tu maleta en Lima y facturarla de nuevo. "
               "Deja margen: 4 horas o una noche, sobre todo en la vuelta, que el agente no puede "
               "verificar. Revisa tu mismo la hora de llegada del MAD-LIM y la salida del LIM-AQP.\n"
-              "6. Paga con tarjeta de credito (da mas proteccion) y compara el total en EUR y en "
+              f"6. Compra los {n} pasajeros en una sola reserva por tramo: si los compras de a "
+              "uno, el precio de los siguientes puede subir cuando se agota la tarifa.\n"
+              "7. Paga con tarjeta de credito (da mas proteccion) y compara el total en EUR y en "
               "PEN: el cambio de moneda de tu banco puede subir el precio.\n")
     elif mejor_u:
-        g += (f"Opcion elegida: {f(mejor_u['total'])} EUR en un solo billete AQP-MAD.\n\n"
+        g += (f"Opcion elegida: {f(mejor_u['total'])} EUR para {n} adultos "
+              f"({f(mejor_u['total'] / n)} por persona), en un solo billete AQP-MAD.\n\n"
               "1. Abre el enlace de Google Flights y confirma el precio.\n"
               "2. Reserva en la web de la aerolinea. Un solo billete te protege si pierdes la "
               "conexion en Lima.\n"
@@ -308,8 +318,8 @@ def guia_compra(tramos, unico):
 
 def telegram(texto):
     """Envia el mensaje. Devuelve True solo si Telegram lo acepto."""
-    # strip: un secret pegado con espacios, salto de linea o BOM (﻿) rompe la peticion
-    tok, chat = (os.environ.get(v, "").strip("﻿ \t\r\n")
+    # strip: un secret pegado con espacios, salto de linea o marca BOM rompe la peticion
+    tok, chat = (os.environ.get(v, "").strip(chr(0xFEFF) + " \t\r\n")
                  for v in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"))
     if not tok or not chat:
         print("[aviso] Falta TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID: no se envio aviso.")
@@ -353,9 +363,11 @@ def main():
     estado = {}
     if STATE_FILE.exists():
         estado = json.loads(STATE_FILE.read_text())
+    if estado.get("adultos") != CONFIG["adultos"]:
+        estado = {}  # precios de otro tamano de grupo: no son comparables
     avisado = estado.get("avisado")
     if avisado is None:
-        avisar = mejor_hoy <= CONFIG["umbral_total_eur"]
+        avisar = mejor_hoy <= CONFIG["umbral_por_persona_eur"] * CONFIG["adultos"]
         motivo = "Precio bajo tu umbral"
     else:
         avisar = mejor_hoy <= avisado * (1 - CONFIG["mejora_minima_pct"] / 100)
@@ -363,9 +375,11 @@ def main():
     if avisar and telegram(f"{motivo}: {f(mejor_hoy)} EUR\n\n{txt}"):
         avisado = mejor_hoy
         telegram(guia_compra(tramos, unico))
-    nuevo = {"mejor": min(mejor_hoy, estado.get("mejor", mejor_hoy)), "avisado": avisado,
+    nuevo = {"adultos": CONFIG["adultos"],
+             "mejor": min(mejor_hoy, estado.get("mejor", mejor_hoy)), "avisado": avisado,
              "fecha": date.today().isoformat()}
-    if (nuevo["mejor"], nuevo["avisado"]) != (estado.get("mejor"), estado.get("avisado")):
+    clave = ("adultos", "mejor", "avisado")
+    if any(nuevo[k] != estado.get(k) for k in clave):
         STATE_FILE.write_text(json.dumps(nuevo))
 
 

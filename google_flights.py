@@ -94,15 +94,18 @@ def _ofertas(payload):
     return sorted(out, key=lambda o: o["precio"])
 
 
-def vuelos(origen, destino, ida, vuelta=None, moneda="EUR"):
-    """Ofertas ordenadas por precio. Con `vuelta`, el precio es el de ida y vuelta."""
+def vuelos(origen, destino, ida, vuelta=None, moneda="EUR", adultos=1):
+    """Ofertas ordenadas por precio. Con `vuelta`, el precio es el de ida y vuelta.
+
+    El precio es el TOTAL de todos los adultos, y solo cuentan las tarifas con plazas
+    suficientes para el grupo (por eso puede subir mas que proporcionalmente)."""
     tramos = [FlightQuery(date=ida.isoformat(), from_airport=origen, to_airport=destino)]
     if vuelta:
         tramos.append(FlightQuery(date=vuelta.isoformat(), from_airport=destino,
                                   to_airport=origen))
     q = create_query(flights=tramos, seat="economy",
                      trip="round-trip" if vuelta else "one-way",
-                     passengers=Passengers(adults=1), language="es", currency=moneda)
+                     passengers=Passengers(adults=adultos), language="es", currency=moneda)
     ultimo = None
     for intento in range(REINTENTOS + 1):
         try:
@@ -122,9 +125,9 @@ def vuelos(origen, destino, ida, vuelta=None, moneda="EUR"):
     raise GoogleError(f"{origen}-{destino} {ida}: {ultimo}")
 
 
-def mas_barato(origen, destino, ida, vuelta=None, moneda="EUR"):
+def mas_barato(origen, destino, ida, vuelta=None, moneda="EUR", adultos=1):
     """Oferta mas barata (o None si no hay vuelos). Cada consulta se hace una sola vez."""
-    clave = (origen, destino, ida, vuelta, moneda)
+    clave = (origen, destino, ida, vuelta, moneda, adultos)
     if clave in _cache:
         return _cache[clave]
     k = "|".join(str(x) for x in clave)
@@ -143,7 +146,7 @@ def mas_barato(origen, destino, ida, vuelta=None, moneda="EUR"):
     disco[k] = {"t": time.time(), "estado": "en_curso"}
     _guardar_disco(disco)
     try:
-        ofertas = vuelos(origen, destino, ida, vuelta, moneda)
+        ofertas = vuelos(origen, destino, ida, vuelta, moneda, adultos)
     except GoogleError:
         stats["fallos"] += 1
         disco[k] = {"t": time.time(), "estado": "fallo"}
@@ -164,10 +167,10 @@ def minutos_dia(hora):
     return h * 60 + m
 
 
-def enlace(origen, destino, ida, vuelta):
-    """Enlace a Google Flights con ruta y fechas cargadas, para confirmar a mano."""
+def enlace(origen, destino, ida, vuelta, adultos=1):
+    """Enlace a Google Flights con ruta, fechas y pasajeros cargados, para confirmar a mano."""
     from urllib.parse import quote, urlencode
-    q = f"Flights from {origen} to {destino} on {ida} through {vuelta}"
+    q = f"Flights from {origen} to {destino} on {ida} through {vuelta} for {adultos} adults"
     return f"{URL}?" + urlencode({"q": q, "curr": "EUR"}, quote_via=quote)
 
 
