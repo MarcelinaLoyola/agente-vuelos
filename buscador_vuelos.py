@@ -274,6 +274,38 @@ def mensaje(tramos, unico, fuente="cache"):
     return m
 
 
+def guia_compra(tramos, unico):
+    """Segundo mensaje del aviso: como comprar la opcion mas barata sin llevarse sorpresas."""
+    mejor_t = tramos[0] if tramos else None
+    mejor_u = unico[0] if unico else None
+    g = "Como comprarlo (lo haces tu, desde tu navegador: el agente nunca compra)\n\n"
+    if mejor_t and (not mejor_u or mejor_t["total"] <= mejor_u["total"]):
+        g += (f"Opcion elegida: {f(mejor_t['total'])} EUR en dos billetes separados.\n"
+              + (f"{mejor_t['detalle']}\n" if mejor_t.get("detalle") else "") + "\n"
+              "1. Abre cada enlace de Google Flights y confirma que el precio sigue igual. "
+              "Los precios cambian en horas.\n"
+              "2. Elige 'Reservar' en la web de la aerolinea si cuesta lo mismo que en una agencia: "
+              "los cambios y reclamos son mas faciles.\n"
+              "3. Compra primero el LIM-MAD, que es el caro y el que manda en las fechas; "
+              "el AQP-LIM despues, enseguida.\n"
+              "4. Antes de pagar, mira el equipaje: los precios que ves suelen ser la tarifa "
+              "basica sin maleta, y una low cost puede cobrarla aparte.\n"
+              "5. Con billetes separados debes recoger tu maleta en Lima y facturarla de nuevo. "
+              "Deja margen: 4 horas o una noche, sobre todo en la vuelta, que el agente no puede "
+              "verificar. Revisa tu mismo la hora de llegada del MAD-LIM y la salida del LIM-AQP.\n"
+              "6. Paga con tarjeta de credito (da mas proteccion) y compara el total en EUR y en "
+              "PEN: el cambio de moneda de tu banco puede subir el precio.\n")
+    elif mejor_u:
+        g += (f"Opcion elegida: {f(mejor_u['total'])} EUR en un solo billete AQP-MAD.\n\n"
+              "1. Abre el enlace de Google Flights y confirma el precio.\n"
+              "2. Reserva en la web de la aerolinea. Un solo billete te protege si pierdes la "
+              "conexion en Lima.\n"
+              "3. Revisa equipaje y paga con tarjeta de credito, comparando EUR y PEN.\n")
+    g += ("\nSi al abrir el enlace el precio es mayor, no pasa nada: el agente seguira buscando "
+          "y te avisara si baja otra vez.")
+    return g
+
+
 def telegram(texto):
     """Envia el mensaje. Devuelve True solo si Telegram lo acepto."""
     tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
@@ -328,6 +360,7 @@ def main():
         motivo = "El precio bajo respecto al ultimo aviso"
     if avisar and telegram(f"{motivo}: {f(mejor_hoy)} EUR\n\n{txt}"):
         avisado = mejor_hoy
+        telegram(guia_compra(tramos, unico))
     nuevo = {"mejor": min(mejor_hoy, estado.get("mejor", mejor_hoy)), "avisado": avisado,
              "fecha": date.today().isoformat()}
     if (nuevo["mejor"], nuevo["avisado"]) != (estado.get("mejor"), estado.get("avisado")):
