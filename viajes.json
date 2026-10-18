@@ -12,6 +12,18 @@
    "dur_max": 28,
    "adultos": 3,
    "umbral_por_persona_eur": 980
+  },
+  {
+   "id": "cusco-2027-02",
+   "nombre": "Cusco",
+   "origen": "AQP",
+   "destino": "CUZ",
+   "salida_desde": "2027-02-12",
+   "flex_dias": 3,
+   "dur_min": 5,
+   "dur_max": 5,
+   "adultos": 2,
+   "umbral_por_persona_eur": 50
   }
  ]
 }
