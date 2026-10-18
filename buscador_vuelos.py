@@ -266,7 +266,7 @@ def mensaje(tramos, unico, fuente="cache"):
             m += (f"- {f(u['total'])} EUR | sale {u['salida']} vuelve {u['regreso']} "
                   f"({u['dias']} dias, escalas: {u['escalas']})\n"
                   + (f"  {u['link']}\n" if u["link"] else "")
-                  + f"  Google Flights:{gflights(c['origen'], c['destino'], u['salida'], u['regreso'])}\n")
+                  + f"  Google Flights: {gflights(c['origen'], c['destino'], u['salida'], u['regreso'])}\n")
     m += ("\nPrecios en vivo, pero pueden cambiar: confirma al abrir el enlace. " if en_vivo
           else "\nPrecios en cache de buscadores: confirma al abrir el enlace. ")
     m += ("Con 0 noches en Lima, la conexion de ida se verifica (3 h minimo) pero la de vuelta "
@@ -275,16 +275,19 @@ def mensaje(tramos, unico, fuente="cache"):
 
 
 def telegram(texto):
+    """Envia el mensaje. Devuelve True solo si Telegram lo acepto."""
     tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
     if not tok or not chat:
         print("[aviso] Falta TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID: no se envio aviso.")
-        return
+        return False
     data = urllib.parse.urlencode({"chat_id": chat, "text": texto[:4000],
                                    "disable_web_page_preview": "true"}).encode()
     try:
         urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage", data, timeout=30)
+        return True
     except Exception as e:
         print(f"[aviso] No se pudo enviar el mensaje de Telegram: {e}", file=sys.stderr)
+        return False
 
 
 def main():
@@ -311,19 +314,24 @@ def main():
     mejor_hoy = min(confiables, default=None)
     if mejor_hoy is None:
         return
-    prev = None
+    # El estado guarda el ultimo precio por el que SI se aviso, no el mejor visto: asi un
+    # precio bueno que no llego a Telegram (sin configurar, o con error) se avisa despues.
+    estado = {}
     if STATE_FILE.exists():
-        prev = json.loads(STATE_FILE.read_text()).get("mejor")
-    if prev is None:
+        estado = json.loads(STATE_FILE.read_text())
+    avisado = estado.get("avisado")
+    if avisado is None:
         avisar = mejor_hoy <= CONFIG["umbral_total_eur"]
         motivo = "Precio bajo tu umbral"
     else:
-        avisar = mejor_hoy <= prev * (1 - CONFIG["mejora_minima_pct"] / 100)
-        motivo = "El precio bajo respecto al anterior"
-    if avisar:
-        telegram(f"{motivo}: {f(mejor_hoy)} EUR\n\n{txt}")
-    if prev is None or mejor_hoy < prev:
-        STATE_FILE.write_text(json.dumps({"mejor": mejor_hoy, "fecha": date.today().isoformat()}))
+        avisar = mejor_hoy <= avisado * (1 - CONFIG["mejora_minima_pct"] / 100)
+        motivo = "El precio bajo respecto al ultimo aviso"
+    if avisar and telegram(f"{motivo}: {f(mejor_hoy)} EUR\n\n{txt}"):
+        avisado = mejor_hoy
+    nuevo = {"mejor": min(mejor_hoy, estado.get("mejor", mejor_hoy)), "avisado": avisado,
+             "fecha": date.today().isoformat()}
+    if (nuevo["mejor"], nuevo["avisado"]) != (estado.get("mejor"), estado.get("avisado")):
+        STATE_FILE.write_text(json.dumps(nuevo))
 
 
 if __name__ == "__main__":
