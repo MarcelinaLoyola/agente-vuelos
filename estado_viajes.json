@@ -1,13 +1,13 @@
 {
  "cusco-2027-02": {
   "avisado": null,
-  "fecha": "2026-11-02",
+  "fecha": "2026-11-03",
   "firma": "3c59e164c8",
-  "mejor": 177
+  "mejor": 176
  },
  "madrid-feb-2027": {
   "avisado": 2715,
-  "fecha": "2026-11-02",
+  "fecha": "2026-11-03",
   "firma": "ec9ecab85d",
   "mejor": 2622
  }
